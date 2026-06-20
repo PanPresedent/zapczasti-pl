@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import AuthModal, { type AuthUser } from "@/components/AuthModal";
+import AuthModal from "@/components/AuthModal";
 import Cart from "@/components/Cart";
 import { useCart } from "@/components/CartContext";
-
-type HeaderUser = AuthUser;
+import { useAuth } from "@/components/AuthContext";
 
 function PersonIcon({ className }: { className?: string }) {
   return (
@@ -83,9 +82,9 @@ function CartIcon({ className }: { className?: string }) {
 }
 
 export default function Header() {
-  const [user, setUser] = useState<HeaderUser | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const { totalCount, openCart } = useCart();
+  const { user, signOut } = useAuth();
 
   return (
     <>
@@ -115,22 +114,24 @@ export default function Header() {
           {user === null ? (
             <button
               type="button"
-              aria-label="Zaloguj się"
+              aria-label="Logowanie"
               onClick={() => setAuthOpen(true)}
               className="flex items-center gap-2 rounded-lg border border-white/80 px-3 py-2 text-base text-white transition hover:bg-white/10 sm:px-5 sm:py-3"
             >
               <PersonIcon className="h-5 w-5 shrink-0" />
-              <span className="hidden sm:inline">Zaloguj się</span>
+              <span className="hidden sm:inline">Logowanie</span>
             </button>
           ) : (
             <>
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-300 text-sm font-bold uppercase text-slate-700"
-                aria-label={`Zalogowano jako ${user.name}`}
-                title={user.name}
+              <button
+                type="button"
+                onClick={() => signOut()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-300 text-sm font-bold uppercase text-slate-700 transition hover:bg-slate-200"
+                aria-label={`Zalogowano jako ${user.name} — wyloguj się`}
+                title={`${user.name} — wyloguj się`}
               >
                 {user.name.charAt(0)}
-              </span>
+              </button>
               <button
                 type="button"
                 aria-label="Wiadomości"
@@ -168,10 +169,7 @@ export default function Header() {
       <AuthModal
         open={authOpen}
         onClose={() => setAuthOpen(false)}
-        onAuthenticated={(authenticatedUser) => {
-          setUser(authenticatedUser);
-          setAuthOpen(false);
-        }}
+        onAuthenticated={() => setAuthOpen(false)}
       />
 
       <Cart />

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 export type AuthUser = {
   name: string;
@@ -11,8 +13,6 @@ type AuthModalProps = {
   onClose: () => void;
   onAuthenticated: (user: AuthUser) => void;
 };
-
-type Tab = "login" | "register";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -75,64 +75,53 @@ function GoogleIcon() {
 
 function FacebookIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="#1877F2" aria-hidden>
       <path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.5 2.9h-2.3v7A10 10 0 0 0 22 12z" />
     </svg>
   );
 }
 
-function SocialButtons() {
+function BenefitIcon({ children }: { children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={() => {
-          // TODO: logowanie przez Google
-        }}
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm font-medium text-[#333] transition hover:bg-slate-50"
-      >
-        <GoogleIcon />
-        Zaloguj przez Google
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          // TODO: logowanie przez Facebook
-        }}
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#1877F2] text-sm font-medium text-white transition hover:bg-[#1465d4]"
-      >
-        <FacebookIcon />
-        Zaloguj przez Facebook
-      </button>
-    </div>
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1a5c38]/10 text-[#1a5c38]">
+      {children}
+    </span>
   );
 }
 
-function Divider() {
-  return (
-    <div className="my-4 flex items-center gap-3 text-xs uppercase text-slate-400">
-      <span className="h-px flex-1 bg-slate-200" />
-      lub
-      <span className="h-px flex-1 bg-slate-200" />
-    </div>
-  );
-}
+const BENEFITS = [
+  {
+    text: "Dodaj ogłoszenie i sprzedawaj części",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    ),
+  },
+  {
+    text: "Zapisuj ogłoszenia do ulubionych",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
+      </svg>
+    ),
+  },
+  {
+    text: "Kontaktuj się ze sprzedawcami",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+        <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 9 9 0 0 1-3.8-.8L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" />
+      </svg>
+    ),
+  },
+];
 
 export default function AuthModal({ open, onClose, onAuthenticated }: AuthModalProps) {
-  const [tab, setTab] = useState<Tab>("login");
-
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginErrors, setLoginErrors] = useState<Record<string, string>>({});
-
-  const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const [regConfirm, setRegConfirm] = useState("");
-  const [regAccept, setRegAccept] = useState(false);
-  const [regErrors, setRegErrors] = useState<Record<string, string>>({});
-
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -149,44 +138,28 @@ export default function AuthModal({ open, onClose, onAuthenticated }: AuthModalP
 
   if (!open) return null;
 
-  const submitLogin = (e: React.FormEvent) => {
+  const submitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errors: Record<string, string> = {};
-    if (!loginEmail.trim()) errors.email = "Pole wymagane";
-    else if (!EMAIL_RE.test(loginEmail)) errors.email = "Nieprawidłowy adres email";
-    if (!loginPassword) errors.password = "Pole wymagane";
-    setLoginErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    const nextErrors: Record<string, string> = {};
+    if (!email.trim()) nextErrors.email = "Pole wymagane";
+    else if (!EMAIL_RE.test(email)) nextErrors.email = "Nieprawidłowy adres email";
+    if (!password) nextErrors.password = "Pole wymagane";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
 
-    // TODO(Supabase): prawdziwe logowanie
-    onAuthenticated({ name: loginEmail.split("@")[0] || "Użytkownik" });
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+
+    if (error) {
+      setErrors({ form: "Nieprawidłowy email lub hasło" });
+      return;
+    }
+
+    const metadata = data.user?.user_metadata as { imie?: string } | undefined;
+    const displayName = metadata?.imie || email.split("@")[0] || "Użytkownik";
+    onAuthenticated({ name: displayName });
   };
-
-  const submitRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    const errors: Record<string, string> = {};
-    if (!regName.trim()) errors.name = "Pole wymagane";
-    if (!regEmail.trim()) errors.email = "Pole wymagane";
-    else if (!EMAIL_RE.test(regEmail)) errors.email = "Nieprawidłowy adres email";
-    if (!regPassword) errors.password = "Pole wymagane";
-    else if (regPassword.length < 8 || !/\d/.test(regPassword))
-      errors.password = "Min. 8 znaków i jedna cyfra";
-    if (!regConfirm) errors.confirm = "Pole wymagane";
-    else if (regConfirm !== regPassword) errors.confirm = "Hasła nie są zgodne";
-    if (!regAccept) errors.accept = "Musisz zaakceptować regulamin";
-    setRegErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    // TODO(Supabase): prawdziwa rejestracja
-    onAuthenticated({ name: regName.trim() });
-  };
-
-  const tabClass = (active: boolean) =>
-    `flex-1 border-b-2 px-4 py-3 text-center text-sm font-semibold transition ${
-      active
-        ? "border-[#1a5c38] text-[#1a5c38]"
-        : "border-transparent text-slate-500 hover:text-[#333]"
-    }`;
 
   return (
     <div
@@ -197,56 +170,59 @@ export default function AuthModal({ open, onClose, onAuthenticated }: AuthModalP
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={tab === "login" ? "Zaloguj się" : "Zarejestruj się"}
-        className="relative w-full max-w-md rounded-xl bg-white shadow-2xl"
+        aria-label="Logowanie"
+        className="relative w-full max-w-3xl rounded-xl bg-white shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           aria-label="Zamknij"
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-[#333]"
+          className="absolute right-3 top-3 z-10 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-[#333]"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            className="h-5 w-5"
-            aria-hidden
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5" aria-hidden>
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>
 
-        <div className="flex border-b border-slate-200">
-          <button type="button" className={tabClass(tab === "login")} onClick={() => setTab("login")}>
-            Zaloguj się
-          </button>
-          <button
-            type="button"
-            className={tabClass(tab === "register")}
-            onClick={() => setTab("register")}
-          >
-            Zarejestruj się
-          </button>
-        </div>
+        <div className="grid max-h-[85vh] grid-cols-1 overflow-y-auto md:grid-cols-2">
+          <div className="p-6 sm:p-8">
+            <h2 className="text-xl font-bold text-[#333]">Nie masz konta?</h2>
+            <Link
+              href="/rejestracja"
+              onClick={onClose}
+              className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-[#333] px-4 text-sm font-semibold text-white transition hover:bg-black"
+            >
+              Zarejestruj konto
+            </Link>
 
-        <div className="max-h-[80vh] overflow-y-auto p-5 sm:p-6">
-          {tab === "login" ? (
-            <form onSubmit={submitLogin} noValidate>
+            <h3 className="mt-12 text-sm font-bold uppercase tracking-wide text-slate-500">
+              Korzyści z posiadania konta
+            </h3>
+            <ul className="mt-4 space-y-4">
+              {BENEFITS.map((benefit) => (
+                <li key={benefit.text} className="flex items-center gap-3">
+                  <BenefitIcon>{benefit.icon}</BenefitIcon>
+                  <span className="text-sm text-[#333]">{benefit.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="border-t border-slate-200 p-6 sm:p-8 md:border-l md:border-t-0">
+            <h2 className="text-xl font-bold text-[#333]">Logowanie</h2>
+
+            <form onSubmit={submitLogin} noValidate className="mt-4">
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-[#333]">Email</span>
                 <input
                   type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className={inputClass}
                   placeholder="twoj@email.pl"
                 />
-                {loginErrors.email && <p className={errorClass}>{loginErrors.email}</p>}
+                {errors.email && <p className={errorClass}>{errors.email}</p>}
               </label>
 
               <label className="mt-3 block">
@@ -254,8 +230,8 @@ export default function AuthModal({ open, onClose, onAuthenticated }: AuthModalP
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className={`${inputClass} pr-11`}
                     placeholder="Hasło"
                   />
@@ -268,14 +244,17 @@ export default function AuthModal({ open, onClose, onAuthenticated }: AuthModalP
                     <EyeIcon open={showPassword} />
                   </button>
                 </div>
-                {loginErrors.password && <p className={errorClass}>{loginErrors.password}</p>}
+                {errors.password && <p className={errorClass}>{errors.password}</p>}
               </label>
+
+              {errors.form && <p className="mt-3 text-sm text-red-600">{errors.form}</p>}
 
               <button
                 type="submit"
-                className="mt-4 h-11 w-full rounded-md bg-[#1a5c38] text-sm font-semibold text-white transition hover:bg-[#154b2d]"
+                disabled={loading}
+                className="mt-4 h-11 w-full rounded-md bg-[#1a5c38] text-sm font-semibold text-white transition hover:bg-[#154b2d] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Zaloguj się
+                {loading ? "Logowanie…" : "Zaloguj się"}
               </button>
 
               <button
@@ -285,100 +264,39 @@ export default function AuthModal({ open, onClose, onAuthenticated }: AuthModalP
                 }}
                 className="mt-3 block w-full text-center text-sm text-[#1a5c38] hover:underline"
               >
-                Nie pamiętasz hasła?
+                Nie pamiętam hasła
               </button>
 
-              <Divider />
-              <SocialButtons />
+              <div className="my-4 flex items-center gap-3 text-xs uppercase text-slate-400">
+                <span className="h-px flex-1 bg-slate-200" />
+                lub
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // TODO: logowanie przez Google
+                  }}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm font-medium text-[#333] transition hover:bg-slate-50"
+                >
+                  <GoogleIcon />
+                  Zaloguj się przez Google
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // TODO: logowanie przez Facebook
+                  }}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm font-medium text-[#333] transition hover:bg-slate-50"
+                >
+                  <FacebookIcon />
+                  Zaloguj się przez Facebook
+                </button>
+              </div>
             </form>
-          ) : (
-            <form onSubmit={submitRegister} noValidate>
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-[#333]">Imię</span>
-                <input
-                  type="text"
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  className={inputClass}
-                  placeholder="Jan"
-                />
-                {regErrors.name && <p className={errorClass}>{regErrors.name}</p>}
-              </label>
-
-              <label className="mt-3 block">
-                <span className="mb-1 block text-sm font-medium text-[#333]">Email</span>
-                <input
-                  type="email"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  className={inputClass}
-                  placeholder="twoj@email.pl"
-                />
-                {regErrors.email && <p className={errorClass}>{regErrors.email}</p>}
-              </label>
-
-              <label className="mt-3 block">
-                <span className="mb-1 block text-sm font-medium text-[#333]">Hasło</span>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    className={`${inputClass} pr-11`}
-                    placeholder="Min. 8 znaków, jedna cyfra"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? "Ukryj hasło" : "Pokaż hasło"}
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-[#333]"
-                  >
-                    <EyeIcon open={showPassword} />
-                  </button>
-                </div>
-                {regErrors.password ? (
-                  <p className={errorClass}>{regErrors.password}</p>
-                ) : (
-                  <p className="mt-1 text-xs text-slate-400">Min. 8 znaków oraz jedna cyfra</p>
-                )}
-              </label>
-
-              <label className="mt-3 block">
-                <span className="mb-1 block text-sm font-medium text-[#333]">Potwierdź hasło</span>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={regConfirm}
-                  onChange={(e) => setRegConfirm(e.target.value)}
-                  className={inputClass}
-                  placeholder="Powtórz hasło"
-                />
-                {regErrors.confirm && <p className={errorClass}>{regErrors.confirm}</p>}
-              </label>
-
-              <label className="mt-4 flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={regAccept}
-                  onChange={(e) => setRegAccept(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#1a5c38]"
-                />
-                <span className="text-sm text-[#333]">
-                  Akceptuję regulamin i politykę prywatności
-                </span>
-              </label>
-              {regErrors.accept && <p className={errorClass}>{regErrors.accept}</p>}
-
-              <button
-                type="submit"
-                className="mt-4 h-11 w-full rounded-md bg-[#1a5c38] text-sm font-semibold text-white transition hover:bg-[#154b2d]"
-              >
-                Zarejestruj się
-              </button>
-
-              <Divider />
-              <SocialButtons />
-            </form>
-          )}
+          </div>
         </div>
       </div>
     </div>
