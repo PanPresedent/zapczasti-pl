@@ -5,6 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
 export type AuthUser = {
+  id: string;
   name: string;
   email: string;
 };
@@ -22,6 +23,7 @@ function toUser(session: Session | null): AuthUser | null {
   const metadata = session.user.user_metadata as { imie?: string } | undefined;
   const email = session.user.email ?? "";
   return {
+    id: session.user.id,
     name: metadata?.imie || email.split("@")[0] || "Użytkownik",
     email,
   };

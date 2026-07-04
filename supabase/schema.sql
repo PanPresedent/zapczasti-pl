@@ -5,13 +5,29 @@ create table public.profiles (
   imie text,
   nazwisko text,
   telefon text,
-  typ_konta text check (typ_konta in ('kupujacy', 'sprzedawca')),
+  typ_konta text check (typ_konta in ('private', 'company')),
   nazwa_firmy text,
   nip text,
   adres text,
+  miasto text,
+  marketing boolean default false,
+  opis_firmy text,
+  prefix_artykulu text,
   avatar_url text,
   created_at timestamp with time zone default now()
 );
+
+-- Dla istniejących baz (idempotentne dodanie kolumn):
+alter table public.profiles add column if not exists miasto text;
+alter table public.profiles add column if not exists marketing boolean default false;
+alter table public.profiles add column if not exists opis_firmy text;
+alter table public.profiles add column if not exists prefix_artykulu text;
+
+-- Migracja typ_konta: 'kupujacy'/'sprzedawca' -> 'private'/'company'
+update public.profiles set typ_konta = 'company' where typ_konta = 'sprzedawca';
+update public.profiles set typ_konta = 'private' where typ_konta = 'kupujacy';
+alter table public.profiles drop constraint if exists profiles_typ_konta_check;
+alter table public.profiles add constraint profiles_typ_konta_check check (typ_konta in ('private', 'company'));
 
 -- Объявления
 create table public.ogloszenia (
@@ -27,12 +43,15 @@ create table public.ogloszenia (
   kategoria text,
   nazwa_czesci text,
   numer_oem text,
+  numer_artykulu text,
   miasto text,
   zdjecia text[],
   status text default 'aktywne' check (status in ('aktywne', 'nieaktywne', 'sprzedane', 'oczekuje')),
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+
+alter table public.ogloszenia add column if not exists numer_artykulu text;
 
 -- Избранное
 create table public.ulubione (

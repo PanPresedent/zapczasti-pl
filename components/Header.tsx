@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import AuthModal from "@/components/AuthModal";
 import Cart from "@/components/Cart";
 import { useCart } from "@/components/CartContext";
 import { useAuth } from "@/components/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 function PersonIcon({ className }: { className?: string }) {
   return (
@@ -84,7 +86,19 @@ function CartIcon({ className }: { className?: string }) {
 export default function Header() {
   const [authOpen, setAuthOpen] = useState(false);
   const { totalCount, openCart } = useCart();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const goToAccount = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("typ_konta")
+      .eq("id", user.id)
+      .maybeSingle();
+    const typ = (data as { typ_konta?: string } | null)?.typ_konta;
+    router.push(typ === "company" ? "/konto-firmy" : "/konto");
+  };
 
   return (
     <>
@@ -94,7 +108,7 @@ export default function Header() {
           <img
             src="/logo_transparent.png"
             alt="zderz.pl"
-            className="h-14 w-auto object-contain"
+            className="h-auto w-20 max-w-[20vw] object-contain sm:h-14 sm:w-auto sm:max-w-none"
             loading="eager"
           />
         </a>
@@ -125,10 +139,10 @@ export default function Header() {
             <>
               <button
                 type="button"
-                onClick={() => signOut()}
+                onClick={goToAccount}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-300 text-sm font-bold uppercase text-slate-700 transition hover:bg-slate-200"
-                aria-label={`Zalogowano jako ${user.name} — wyloguj się`}
-                title={`${user.name} — wyloguj się`}
+                aria-label={`Zalogowano jako ${user.name} — moje konto`}
+                title={`${user.name} — moje konto`}
               >
                 {user.name.charAt(0)}
               </button>
@@ -153,11 +167,11 @@ export default function Header() {
             type="button"
             aria-label={`Koszyk, ${totalCount} produktów`}
             onClick={openCart}
-            className="relative rounded-md p-2 text-white transition hover:bg-white/10"
+            className="relative flex shrink-0 items-center rounded-lg border-2 border-[#1a5c38] bg-white px-3 py-2 text-[#1a5c38] transition hover:bg-[#1a5c38]/5"
           >
-            <CartIcon className="h-7 w-7" />
+            <CartIcon className="h-6 w-6" />
             {totalCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold text-white ring-2 ring-[#1a5c38]">
+              <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold text-white">
                 {totalCount}
               </span>
             )}

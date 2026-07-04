@@ -9,6 +9,49 @@ type AccountType = "private" | "company";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type CompanyData = { name: string; street: string; city: string };
+
+// Rozdziela pełny adres "UL. XYZ 1, 00-000 MIASTO" na ulicę i miasto.
+function parseAddress(full: string): { street: string; city: string } {
+  if (!full) return { street: "", city: "" };
+  const parts = full.split(",");
+  const street = parts[0]?.trim() ?? "";
+  const rest = parts.slice(1).join(",").trim();
+  const match = rest.match(/\d{2}-\d{3}\s+(.+)/);
+  const city = match ? match[1].trim() : rest;
+  return { street, city };
+}
+
+// Rejestr.io (wymaga klucza API) — próbujemy, a przy braku danych/kluczu wracamy null.
+async function fetchFromRejestrIo(nip: string): Promise<CompanyData | null> {
+  try {
+    const res = await fetch(`https://api.rejestr.io/v2/krs?nip=${nip}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const entity = Array.isArray(json?.results) ? json.results[0] : json;
+    const name: string | undefined = entity?.nazwy?.pelna || entity?.nazwa || entity?.name;
+    const addr = entity?.adres ?? {};
+    const street = [addr.ulica, addr.numer].filter(Boolean).join(" ").trim();
+    const cityValue: string = addr.miejscowosc || addr.miasto || "";
+    if (!name) return null;
+    return { name, street, city: cityValue };
+  } catch {
+    return null;
+  }
+}
+
+// Biała lista podatników VAT (Ministerstwo Finansów) — publiczne, bez klucza.
+async function fetchFromMf(nip: string): Promise<CompanyData | null> {
+  const date = new Date().toISOString().slice(0, 10);
+  const res = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${nip}?date=${date}`);
+  if (!res.ok) return null;
+  const json = await res.json();
+  const subject = json?.result?.subject;
+  if (!subject?.name) return null;
+  const { street, city } = parseAddress(subject.workingAddress || subject.residenceAddress || "");
+  return { name: subject.name as string, street, city };
+}
+
 const inputClass =
   "h-11 w-full rounded-md border border-slate-300 px-3 text-sm text-[#333] outline-none ring-[#1a5c38] focus:ring-2";
 const errorClass = "mt-1 text-xs text-red-600";
@@ -93,14 +136,43 @@ export default function RejestracjaPage() {
   const [company, setCompany] = useState("");
   const [nip, setNip] = useState("");
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
   const [phone, setPhone] = useState("");
   const [accept, setAccept] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [nipLoading, setNipLoading] = useState(false);
+  const [nipMessage, setNipMessage] = useState<string | null>(null);
 
   const selectType = (next: AccountType) => {
     setType(next);
     setErrors({});
+  };
+
+  const lookupNip = async () => {
+    const cleaned = nip.replace(/[\s-]/g, "");
+    setNipMessage(null);
+    if (!/^\d{10}$/.test(cleaned)) {
+      setErrors((prev) => ({ ...prev, nip: "NIP musi mieć 10 cyfr" }));
+      return;
+    }
+
+    setNipLoading(true);
+    try {
+      const found = (await fetchFromRejestrIo(cleaned)) ?? (await fetchFromMf(cleaned));
+      if (!found) {
+        setNipMessage("Nie znaleziono firmy o podanym NIP");
+        return;
+      }
+      setErrors((prev) => ({ ...prev, nip: "" }));
+      if (found.name) setCompany(found.name);
+      if (found.street) setAddress(found.street);
+      if (found.city) setCity(found.city);
+    } catch {
+      setNipMessage("Nie znaleziono firmy o podanym NIP");
+    } finally {
+      setNipLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,6 +193,7 @@ export default function RejestracjaPage() {
       if (!nip.trim()) next.nip = "Pole wymagane";
       else if (!/^\d{10}$/.test(nip.replace(/[\s-]/g, ""))) next.nip = "NIP musi mieć 10 cyfr";
       if (!address.trim()) next.address = "Pole wymagane";
+      if (!city.trim()) next.city = "Pole wymagane";
       if (!phone.trim()) next.phone = "Pole wymagane";
     }
 
@@ -129,7 +202,7 @@ export default function RejestracjaPage() {
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
-    const typ_konta = type === "company" ? "sprzedawca" : "kupujacy";
+    const typ_konta = type === "company" ? "company" : "private";
     const [imie, ...rest] = name.trim().split(/\s+/);
     const nazwisko = rest.join(" ");
 
@@ -140,7 +213,7 @@ export default function RejestracjaPage() {
       telefon: type === "company" ? phone.trim() : null,
       nazwa_firmy: type === "company" ? company.trim() : null,
       nip: type === "company" ? nip.replace(/[\s-]/g, "") : null,
-      adres: type === "company" ? address.trim() : null,
+      adres: type === "company" ? [address.trim(), city.trim()].filter(Boolean).join(", ") : null,
     };
 
     setLoading(true);
@@ -259,9 +332,38 @@ export default function RejestracjaPage() {
 
                   {type === "company" && (
                     <>
+                      <div className="block">
+                        <span className="mb-1 block text-sm font-medium text-[#333]">NIP</span>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={nip}
+                            onChange={(e) => setNip(e.target.value)}
+                            className={inputClass}
+                            placeholder="1234567890"
+                          />
+                          <button
+                            type="button"
+                            onClick={lookupNip}
+                            disabled={nipLoading}
+                            className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-[#1a5c38] px-4 text-sm font-semibold text-white transition hover:bg-[#154b2d] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {nipLoading && (
+                              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                              </svg>
+                            )}
+                            {nipLoading ? "Sprawdzam…" : "Sprawdź"}
+                          </button>
+                        </div>
+                        {errors.nip && <p className={errorClass}>{errors.nip}</p>}
+                        {nipMessage && <p className="mt-1 text-xs text-red-600">{nipMessage}</p>}
+                      </div>
+
                       <Field label="Nazwa firmy" value={company} onChange={setCompany} error={errors.company} />
-                      <Field label="NIP" value={nip} onChange={setNip} error={errors.nip} placeholder="1234567890" />
                       <Field label="Adres siedziby" value={address} onChange={setAddress} error={errors.address} />
+                      <Field label="Miasto" value={city} onChange={setCity} error={errors.city} />
                       <Field label="Telefon kontaktowy" type="tel" value={phone} onChange={setPhone} error={errors.phone} placeholder="+48 500 000 000" />
                     </>
                   )}
