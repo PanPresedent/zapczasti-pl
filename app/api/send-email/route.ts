@@ -26,6 +26,18 @@ type SupabaseEmailPayload = {
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = "zderz.pl <noreply@zderz.pl>";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://zderz.pl").replace(/\/$/, "");
+
+// Podmienia origin (np. http://localhost:3000) na produkcyjny SITE_URL, zachowując ścieżkę.
+function normalizeRedirect(redirectTo: string): string {
+  if (!redirectTo) return SITE_URL;
+  try {
+    const url = new URL(redirectTo);
+    return `${SITE_URL}${url.pathname}${url.search}${url.hash}`.replace(/\/$/, "") || SITE_URL;
+  } catch {
+    return SITE_URL;
+  }
+}
 
 type Template = { subject: string; heading: string; intro: string; button: string; note?: string };
 
@@ -66,7 +78,7 @@ function buildConfirmationUrl(payload: SupabaseEmailPayload["email_data"]): stri
   const params = new URLSearchParams({
     token: payload.token_hash,
     type: payload.email_action_type,
-    redirect_to: payload.redirect_to,
+    redirect_to: normalizeRedirect(payload.redirect_to),
   });
   return `${SUPABASE_URL}/auth/v1/verify?${params.toString()}`;
 }
