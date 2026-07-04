@@ -216,45 +216,53 @@ export default function RejestracjaPage() {
       adres: type === "company" ? [address.trim(), city.trim()].filter(Boolean).join(", ") : null,
     };
 
-    setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: profileData },
-    });
-
     const DUPLICATE_MSG = "Konto z tym adresem email już istnieje. Zaloguj się.";
 
-    if (error) {
-      setLoading(false);
-      const alreadyRegistered =
-        error.code === "user_already_exists" ||
-        error.status === 422 ||
-        /already\s*registered|already\s*been\s*registered|already\s*exists/i.test(error.message);
-      setErrors({ form: alreadyRegistered ? DUPLICATE_MSG : error.message });
-      return;
-    }
-
-    // Supabase (przy włączonym potwierdzaniu email) nie zwraca błędu dla istniejącego
-    // konta, tylko usera z pustą tablicą identities — traktujemy to jako duplikat.
-    if (data.user && (data.user.identities?.length ?? 0) === 0) {
-      setLoading(false);
-      setErrors({ form: DUPLICATE_MSG });
-      return;
-    }
-
-    // Profil tworzy automatycznie trigger handle_new_user.
-    // Gdy potwierdzanie email jest wyłączone, mamy od razu sesję — zapisujemy też z klienta.
-    if (data.user && data.session) {
-      await supabase.from("profiles").upsert({
-        id: data.user.id,
+    setLoading(true);
+    setErrors({});
+    try {
+      const { data, error } = await supabase.auth.signUp({
         email,
-        ...profileData,
+        password,
+        options: { data: profileData },
       });
-    }
 
-    setLoading(false);
-    setSubmitted(true);
+      if (error) {
+        const message = typeof error.message === "string" ? error.message : "";
+        const alreadyRegistered =
+          error.code === "user_already_exists" ||
+          error.status === 422 ||
+          /already\s*registered|already\s*been\s*registered|already\s*exists/i.test(message);
+        setErrors({
+          form: alreadyRegistered ? DUPLICATE_MSG : message || "Nie udało się utworzyć konta. Spróbuj ponownie.",
+        });
+        return;
+      }
+
+      // Supabase (przy włączonym potwierdzaniu email) nie zwraca błędu dla istniejącego
+      // konta, tylko usera z pustą tablicą identities — traktujemy to jako duplikat.
+      if (data.user && (data.user.identities?.length ?? 0) === 0) {
+        setErrors({ form: DUPLICATE_MSG });
+        return;
+      }
+
+      // Profil tworzy automatycznie trigger handle_new_user.
+      // Gdy potwierdzanie email jest wyłączone, mamy od razu sesję — zapisujemy też z klienta.
+      if (data.user && data.session) {
+        await supabase.from("profiles").upsert({
+          id: data.user.id,
+          email,
+          ...profileData,
+        });
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Wystąpił błąd. Spróbuj ponownie.";
+      setErrors({ form: message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -394,7 +402,11 @@ export default function RejestracjaPage() {
                     </span>
                   </label>
                   {errors.accept && <p className={errorClass}>{errors.accept}</p>}
-                  {errors.form && <p className="text-sm text-red-600">{errors.form}</p>}
+                  {errors.form && (
+                    <p className="text-sm text-red-600">
+                      {typeof errors.form === "string" ? errors.form : JSON.stringify(errors.form)}
+                    </p>
+                  )}
 
                   <button
                     type="submit"
