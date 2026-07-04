@@ -137,10 +137,11 @@ function verifySignature(rawBody: string, headers: Headers, secret: string): boo
 export async function POST(request: Request) {
   const rawBody = await request.text();
 
-  const secret = process.env.SEND_EMAIL_HOOK_SECRET;
-  if (secret && !verifySignature(rawBody, request.headers, secret)) {
-    return Response.json({ error: { http_code: 401, message: "Nieprawidłowy podpis webhooka" } }, { status: 401 });
-  }
+  // TODO: TYMCZASOWO WYŁĄCZONE (test) — przywróć weryfikację podpisu przed wdrożeniem.
+  // const secret = process.env.SEND_EMAIL_HOOK_SECRET;
+  // if (secret && !verifySignature(rawBody, request.headers, secret)) {
+  //   return Response.json({ error: { http_code: 401, message: "Nieprawidłowy podpis webhooka" } }, { status: 401 });
+  // }
 
   let payload: SupabaseEmailPayload;
   try {

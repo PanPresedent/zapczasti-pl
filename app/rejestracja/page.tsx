@@ -223,9 +223,23 @@ export default function RejestracjaPage() {
       options: { data: profileData },
     });
 
+    const DUPLICATE_MSG = "Konto z tym adresem email już istnieje. Zaloguj się.";
+
     if (error) {
       setLoading(false);
-      setErrors({ form: error.message });
+      const alreadyRegistered =
+        error.code === "user_already_exists" ||
+        error.status === 422 ||
+        /already\s*registered|already\s*been\s*registered|already\s*exists/i.test(error.message);
+      setErrors({ form: alreadyRegistered ? DUPLICATE_MSG : error.message });
+      return;
+    }
+
+    // Supabase (przy włączonym potwierdzaniu email) nie zwraca błędu dla istniejącego
+    // konta, tylko usera z pustą tablicą identities — traktujemy to jako duplikat.
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setLoading(false);
+      setErrors({ form: DUPLICATE_MSG });
       return;
     }
 
